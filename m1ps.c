@@ -285,13 +285,6 @@ void execute_imps(struct imps_file *executable, int trace_mode, char *path) {
 
 }
 
-// Printing out exact-width integers in a portable way is slightly tricky,
-// since we can't assume that a uint32_t is an unsigned int or that a
-// int32_t is an int. So we can't just use %x or %d. A solution is to use
-// printf format specifiers from the <inttypes.h> header. The following two
-// functions are provided for your convenience so that you just call them
-// without worring about <inttypes.h>, although you don't have to use use them.
-
 // Print out a 32 bit integer in hexadecimal, including the leading `0x`.
 //
 // @param stream The file stream to output to.
