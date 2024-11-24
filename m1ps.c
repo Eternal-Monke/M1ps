@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-struct imps_file {
+struct m1ps_file {
     uint32_t num_instructions;
     uint32_t entry_point;
     uint32_t *instructions;
@@ -16,8 +16,8 @@ struct imps_file {
     uint8_t *initial_data;
 };
 
-void read_imps_file(char *path, struct imps_file *executable);
-void execute_imps(struct imps_file *executable, int trace_mode, char *path);
+void read_m1ps_file(char *path, struct m1ps_file *executable);
+void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path);
 void print_uint32_in_hexadecimal(FILE *stream, uint32_t value);
 void print_int32_in_decimal(FILE *stream, int32_t value);
 uint32_t read_num_inst(FILE *file);
@@ -34,14 +34,14 @@ int main(int argc, char *argv[]) {
         trace_mode = 1;
         pathname = argv[2];
     } else {
-        fprintf(stderr, "Usage: imps [-t] <executable>\n");
+        fprintf(stderr, "Usage: M1PS [-t] <executable>\n");
         exit(1);
     }
 
-    struct imps_file executable = {0};
-    read_imps_file(pathname, &executable);
+    struct m1ps_file executable = {0};
+    read_m1ps_file(pathname, &executable);
 
-    execute_imps(&executable, trace_mode, pathname);
+    execute_m1ps(&executable, trace_mode, pathname);
 
     free(executable.debug_offsets);
     free(executable.instructions);
@@ -93,9 +93,9 @@ uint16_t read_num_inst_16(FILE *file) {
 }
 
 
-// Read an IMPS executable file from the file at `path` into `executable`.
+// Read an M1PS executable file from the file at `path` into `executable`.
 // Exits the program if the file can't be accessed or is not well-formed.
-void read_imps_file(char *path, struct imps_file *executable) {
+void read_m1ps_file(char *path, struct m1ps_file *executable) {
 
     // opens the file
     FILE *file = fopen(path, "rb");
@@ -113,9 +113,9 @@ void read_imps_file(char *path, struct imps_file *executable) {
         m_number[i] = fgetc(file);
     }
 
-    // checks if the magic number is the correct one for IMPS
-    if (m_number[0] != 0x49 || m_number[1] != 0x4d || m_number[2] != 0x50 || m_number[3] != 0x53) {
-        fprintf(stderr, "Invalid IMPS file\n");
+    // checks if the magic number is the correct one for M1PS
+    if (m_number[0] != 0x49 || m_number[1] != 0x31 || m_number[2] != 0x50 || m_number[3] != 0x53) {
+        fprintf(stderr, "Invalid M1PS file\n");
         fclose(file);
         exit(1);
     }
@@ -182,8 +182,8 @@ void read_imps_file(char *path, struct imps_file *executable) {
 }
 
 
-// Executa an IMPS program
-void execute_imps(struct imps_file *executable, int trace_mode, char *path) {
+// Executes an M1PS program
+void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
 
     // initialises all registers to 0
     uint32_t registar[32] = {0};
@@ -224,12 +224,12 @@ void execute_imps(struct imps_file *executable, int trace_mode, char *path) {
                 } else if (sys_call == 11) {
                     putchar(registar[4]);
                 } else {
-                    fprintf(stderr, "IMPS error: bad syscall number\n");
+                    fprintf(stderr, "M1PS error: bad syscall number\n");
                     exit(1);
                 }
             } else {
                 // errors
-                fprintf(stderr, "IMPS error: bad instruction ");
+                fprintf(stderr, "M1PS error: bad instruction ");
                 print_uint32_in_hexadecimal(stdout, instruction);
                 fprintf(stderr, "\n");
                 exit(1);
@@ -269,7 +269,7 @@ void execute_imps(struct imps_file *executable, int trace_mode, char *path) {
 
         } else {
             // error
-            fprintf(stderr, "IMPS error: bad instruction ");
+            fprintf(stderr, "M1PS error: bad instruction ");
             print_uint32_in_hexadecimal(stderr, instruction);
             fprintf(stderr, "\n");
             exit(1);
@@ -280,7 +280,7 @@ void execute_imps(struct imps_file *executable, int trace_mode, char *path) {
     }
 
     // another error message
-    fprintf(stderr, "IMPS error: execution past the end of instructions\n");
+    fprintf(stderr, "M1PS error: execution past the end of instructions\n");
     exit(1);
 
 }
