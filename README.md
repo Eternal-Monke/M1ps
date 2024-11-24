@@ -7,8 +7,26 @@ A simple MIPS emulator written in C
 ```
 
 ## Operations:
-- Syscall
-- Add
-- Addi
-- Lui
-- Ori
+- SYSCALL
+- ADD
+- ADDI
+- LUI
+- ORI
+
+## Operations that will be added:
+- ADDU
+- ADDIU
+- CLO
+- CLZ
+- MUL
+- BEQ
+- BNE
+- SLT
+- LH
+- LW
+- LB
+- SH
+- SW
+- SB
+
+I will add the completed code for these operations later
