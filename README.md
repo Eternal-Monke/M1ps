@@ -12,8 +12,6 @@ A simple MIPS emulator written in C
 - ADDI
 - LUI
 - ORI
-
-## Operations that will be added:
 - ADDU
 - ADDIU
 - CLO
@@ -29,4 +27,4 @@ A simple MIPS emulator written in C
 - SW
 - SB
 
-I will add the completed code for these operations later
+NOTE: this is still under construction. the input file needs to be in binary format
