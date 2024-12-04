@@ -233,8 +233,6 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
 
             uint32_t function = instruction & 0x3F;
 
-            // add operation (the "else if" function is the syscall and the
-            // "else" is an error)
             if (function == 0x20) {
                 uint32_t rs = (instruction >> 21) & 0x1F;
                 uint32_t rt = (instruction >> 16) & 0x1F;
@@ -249,7 +247,8 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
                 // performing relevant syscalls
                 if (sys_call == 1) {
                     print_int32_in_decimal(stdout, registar[4]);
-                    putchar('\n');  // Add newline after printing integer
+                    // new line
+                    putchar('\n');
                 } else if (sys_call == 10) {
                     exit(1);
                 } else if (sys_call == 11) {
@@ -295,7 +294,6 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
                 // JR instruction
                 uint32_t rs = (instruction >> 21) & 0x1F;
                 if (registar[rs] >= executable->num_instructions) {
-                    // Program completed successfully
                     exit(0);
                 }
                 prog_counter = registar[rs];
