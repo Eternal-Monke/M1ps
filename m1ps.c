@@ -1,4 +1,3 @@
-
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,6 +20,7 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path);
 void print_uint32_in_hexadecimal(FILE *stream, uint32_t value);
 void print_int32_in_decimal(FILE *stream, int32_t value);
 uint32_t read_num_inst(FILE *file);
+uint32_t read_instruction(FILE *file);
 uint16_t read_num_inst_16(FILE *file);
 
 int main(int argc, char *argv[]) {
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
         trace_mode = 1;
         pathname = argv[2];
     } else {
-        fprintf(stderr, "Usage: M1PS [-t] <executable>\n");
+        fprintf(stderr, "Usage: m1ps [-t] <executable>\n");
         exit(1);
     }
 
@@ -52,22 +52,40 @@ int main(int argc, char *argv[]) {
 
 // this reads a 32 bit number a given file - (helper function)
 uint32_t read_num_inst(FILE *file) {
-
     uint32_t val = 0;
+    uint8_t bytes[4];
 
-    // reads 4 bytes at a time until the end of the file
+    // reads 4 bytes
     for (int i = 0; i < 4; i++) {
         int byte = fgetc(file);
-
         if (byte == EOF) {
             continue;
         }
-
-        // shifts the byte where it needs to be
-        val = val | ((uint32_t)(byte) << (i * 8));
+        bytes[i] = (uint8_t)byte;
     }
 
-    // returns the new value
+    // For metadata (instruction count, entry point), use little-endian
+    val = (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0];
+
+    return val;
+}
+
+// Read an instruction from file (big-endian because mips in big endian)
+uint32_t read_instruction(FILE *file) {
+    uint32_t val = 0;
+    uint8_t bytes[4];
+
+    // reads 4 bytes
+    for (int i = 0; i < 4; i++) {
+        int byte = fgetc(file);
+        if (byte == EOF) {
+            continue;
+        }
+        bytes[i] = (uint8_t)byte;
+    }
+
+    val = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+
     return val;
 }
 
@@ -114,7 +132,7 @@ void read_m1ps_file(char *path, struct m1ps_file *executable) {
     }
 
     // checks if the magic number is the correct one for M1PS
-    if (m_number[0] != 0x49 || m_number[1] != 0x31 || m_number[2] != 0x50 || m_number[3] != 0x53) {
+    if (m_number[0] != 0x6d || m_number[1] != 0x31 || m_number[2] != 0x70 || m_number[3] != 0x73) {
         fprintf(stderr, "Invalid M1PS file\n");
         fclose(file);
         exit(1);
@@ -136,7 +154,7 @@ void read_m1ps_file(char *path, struct m1ps_file *executable) {
 
     // reads all instructions and inserts them into array
     for (uint32_t i = 0; i < executable->num_instructions; i++) {
-        executable->instructions[i] = read_num_inst(file);
+        executable->instructions[i] = read_instruction(file);
     }
 
     // allocates memory
@@ -182,21 +200,33 @@ void read_m1ps_file(char *path, struct m1ps_file *executable) {
 }
 
 
-// Executes an M1PS program
+// Executa a PS program
 void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
 
     // initialises all registers to 0
     uint32_t registar[32] = {0};
-
-    // program couter is the entry point now
+    
+    // Set the return address ($ra) to a special value that indicates program end
+    registar[31] = executable->num_instructions;  // $ra is register 31
+    
+    // program counter is the entry point now
     int prog_counter = executable->entry_point;
-
+    
     // loops through instructions
     while (prog_counter < executable->num_instructions) {
-        // currect instruction
         uint32_t instruction = executable->instructions[prog_counter];
+        
+        if (trace_mode) {
+            printf("PC: %d, Instruction: 0x%08x, Num Instructions: %d\n", 
+                   prog_counter, instruction, executable->num_instructions);
+        }
+        
         // current operation
         uint8_t operation = (instruction >> 26) & 0x3F;
+
+        if (trace_mode) {
+            printf("Operation: 0x%02x\n", operation);
+        }
 
         // checking which operation is used (wherther syscall, addi, etc)
         if (operation == 0) {
@@ -210,7 +240,7 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
                 uint32_t rt = (instruction >> 16) & 0x1F;
                 uint32_t rd = (instruction >> 11) & 0x1F;
 
-                // excluding registar 0
+                // excluding register 0
                 if (rd != 0) {
                     registar[rd] = registar[rs] + registar[rt];
                 }
@@ -219,6 +249,7 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
                 // performing relevant syscalls
                 if (sys_call == 1) {
                     print_int32_in_decimal(stdout, registar[4]);
+                    putchar('\n');  // Add newline after printing integer
                 } else if (sys_call == 10) {
                     exit(1);
                 } else if (sys_call == 11) {
@@ -227,16 +258,69 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
                     fprintf(stderr, "M1PS error: bad syscall number\n");
                     exit(1);
                 }
+            } else if (function == 0x21) {
+                uint32_t rs = (instruction >> 21) & 0x1F;
+                uint32_t rd = (instruction >> 11) & 0x1F;
+                if (rd != 0) {
+                    registar[rd] = __builtin_clz(~registar[rs]);
+                }
+            } else if (function == 0x20) {
+                uint32_t rs = (instruction >> 21) & 0x1F;
+                uint32_t rd = (instruction >> 11) & 0x1F;
+                if (rd != 0) {
+                    registar[rd] = __builtin_clz(registar[rs]);
+                }
+            } else if (function == 0x21) {
+                uint32_t rs = (instruction >> 21) & 0x1F;
+                uint32_t rt = (instruction >> 16) & 0x1F;
+                uint32_t rd = (instruction >> 11) & 0x1F;
+                if (rd != 0) {
+                    registar[rd] = registar[rs] + registar[rt];
+                }
+            } else if (function == 0x02) {
+                uint32_t rs = (instruction >> 21) & 0x1F;
+                uint32_t rt = (instruction >> 16) & 0x1F;
+                uint32_t rd = (instruction >> 11) & 0x1F;
+                if (rd != 0) {
+                    registar[rd] = registar[rs] * registar[rt];
+                }
+            } else if (function == 0x2A) {
+                uint32_t rs = (instruction >> 21) & 0x1F;
+                uint32_t rt = (instruction >> 16) & 0x1F;
+                uint32_t rd = (instruction >> 11) & 0x1F;
+                if (rd != 0) {
+                    registar[rd] = (registar[rs] < registar[rt]) ? 1 : 0;
+                }
+            } else if (function == 0x08) {
+                // JR instruction
+                uint32_t rs = (instruction >> 21) & 0x1F;
+                if (registar[rs] >= executable->num_instructions) {
+                    // Program completed successfully
+                    exit(0);
+                }
+                prog_counter = registar[rs];
+                continue;
             } else {
                 // errors
                 fprintf(stderr, "M1PS error: bad instruction ");
-                print_uint32_in_hexadecimal(stdout, instruction);
+                print_uint32_in_hexadecimal(stderr, instruction);
                 fprintf(stderr, "\n");
                 exit(1);
             }
 
         } else if (operation == 0x08) {
             // ADDI instruction
+            uint32_t rs = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t imm = (instruction & 0xFFFF);
+
+            // excluding the 0 registar
+            if (rt != 0) {
+                registar[rt] = registar[rs] + imm;
+            }
+
+        } else if (operation == 0x09) {
+            // ADDIU instruction
             uint32_t rs = (instruction >> 21) & 0x1F;
             uint32_t rt = (instruction >> 16) & 0x1F;
             int16_t imm = (instruction & 0xFFFF);
@@ -267,6 +351,73 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
                 registar[rt] = ((uint32_t)imm) << 16;
             }
 
+        } else if (operation == 0x04) {
+            // BEQ instruction
+            uint32_t rs = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            if (registar[rs] == registar[rt]) {
+                prog_counter += offset;
+                continue;
+            }
+        } else if (operation == 0x05) {
+            // BNE instruction
+            uint32_t rs = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            if (registar[rs] != registar[rt]) {
+                prog_counter += offset;
+                continue;
+            }
+        } else if (operation == 0x20) {
+            // LB instruction
+            uint32_t base = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            if (rt != 0) {
+                registar[rt] = (int8_t)executable->initial_data[registar[base] + offset];
+            }
+        } else if (operation == 0x21) {
+            // LH instruction
+            uint32_t base = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            if (rt != 0) {
+                registar[rt] = (int16_t)(executable->initial_data[registar[base] + offset] | (executable->initial_data[registar[base] + offset + 1] << 8));
+            }
+        } else if (operation == 0x23) {
+            // LW instruction
+            uint32_t base = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            if (rt != 0) {
+                registar[rt] = (executable->initial_data[registar[base] + offset] |
+                                (executable->initial_data[registar[base] + offset + 1] << 8) |
+                                (executable->initial_data[registar[base] + offset + 2] << 16) |
+                                (executable->initial_data[registar[base] + offset + 3] << 24));
+            }
+        } else if (operation == 0x28) {
+            // SB instruction
+            uint32_t base = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            executable->initial_data[registar[base] + offset] = registar[rt] & 0xFF;
+        } else if (operation == 0x29) {
+            // SH instruction
+            uint32_t base = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            executable->initial_data[registar[base] + offset] = registar[rt] & 0xFF;
+            executable->initial_data[registar[base] + offset + 1] = (registar[rt] >> 8) & 0xFF;
+        } else if (operation == 0x2B) {
+            // SW instruction
+            uint32_t base = (instruction >> 21) & 0x1F;
+            uint32_t rt = (instruction >> 16) & 0x1F;
+            int16_t offset = (instruction & 0xFFFF);
+            executable->initial_data[registar[base] + offset] = registar[rt] & 0xFF;
+            executable->initial_data[registar[base] + offset + 1] = (registar[rt] >> 8) & 0xFF;
+            executable->initial_data[registar[base] + offset + 2] = (registar[rt] >> 16) & 0xFF;
+            executable->initial_data[registar[base] + offset + 3] = (registar[rt] >> 24) & 0xFF;
         } else {
             // error
             fprintf(stderr, "M1PS error: bad instruction ");
@@ -286,17 +437,11 @@ void execute_m1ps(struct m1ps_file *executable, int trace_mode, char *path) {
 }
 
 // Print out a 32 bit integer in hexadecimal, including the leading `0x`.
-//
-// @param stream The file stream to output to.
-// @param value The 32 bit integer to output.
 void print_uint32_in_hexadecimal(FILE *stream, uint32_t value) {
     fprintf(stream, "0x%08" PRIx32, value);
 }
 
 // Print out a signed 32 bit integer in decimal.
-//
-// @param stream The file stream to output to.
-// @param value The 32 bit integer to output.
 void print_int32_in_decimal(FILE *stream, int32_t value) {
     fprintf(stream, "%" PRIi32, value);
 }
