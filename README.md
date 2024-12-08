@@ -27,4 +27,4 @@ A simple MIPS emulator written in C
 - SW
 - SB
 
-NOTE: this is still under construction. the input file needs to be in binary format
+NOTE: this is still under construction. the input file needs to be in binary format for this to work
