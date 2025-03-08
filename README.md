@@ -1,5 +1,5 @@
 # M1ps
-A simple MIPS emulator written in C
+A simple MIPS Instruction Interpreter written in C
 
 ## Build:
 ```shell
